@@ -1,0 +1,30 @@
+<section class="charts">
+  {% for key, chart_title, form, fmt in specs %}
+    {% set data = charts[key] %}
+    <figure class="card chart-card {{ 'wide' if form == 'bar' }}">
+      <figcaption>{{ chart_title }}</figcaption>
+      {% if data["labels"] %}
+        <div class="chart-box {{ 'tall' if form == 'hbar' and data['labels']|length > 8 }}"
+             style="{% if form == 'hbar' %}height: {{ [data['labels']|length * 30 + 40, 160]|max }}px{% endif %}">
+          <canvas data-chart="{{ form }}" data-format="{{ fmt }}" data-title="{{ chart_title }}"
+                  data-labels='{{ data["labels"]|tojson|forceescape }}'
+                  data-values='{{ data["values"]|tojson|forceescape }}'
+                  role="img" aria-label="{{ chart_title }}"></canvas>
+        </div>
+        <details class="as-table">
+          <summary>ดูเป็นตาราง</summary>
+          <table>
+            <tbody>
+            {% for label in data["labels"] %}
+              <tr><th scope="row">{{ label }}</th>
+                <td class="num">{{ data["values"][loop.index0]|baht(2) if fmt == "money" else data["values"][loop.index0]|num }}</td></tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </details>
+      {% else %}
+        <p class="empty">ไม่มีข้อมูลในช่วงนี้</p>
+      {% endif %}
+    </figure>
+  {% endfor %}
+</section>

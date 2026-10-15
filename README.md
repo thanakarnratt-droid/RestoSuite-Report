@@ -116,6 +116,29 @@ log อยู่ที่ `logs/export.log` ดูรอบล่าสุดไ
 
 ถ้า log บอกว่า token หมดอายุ หรือยอดรวมไม่ตรง งานรอบนั้นจะจบด้วยสถานะ failed (ดูได้จาก `systemctl status restosuite-export`) ให้อัปเดต token ใน `.env` แล้วสั่งรันใหม่
 
+## Dashboard
+
+`dashboard/` เป็นเว็บ Flask ที่อ่าน `restosuite.db` และแสดงผล 8 หน้า: ภาพรวม + 1 หน้าต่อรายงานใน Common Reports ทุกหน้ากรองตามช่วงวันที่ได้ (มีปุ่มลัด 7 วัน / 30 วัน / เดือนนี้ / เดือนก่อน / ทั้งหมด) และดาวน์โหลด CSV ของช่วงที่เลือกได้ หน้าภาพรวมเทียบตัวเลขกับช่วงก่อนหน้าที่ยาวเท่ากัน เว็บอ่านฐานข้อมูลอย่างเดียว จึงเปิดใช้ได้ระหว่างที่งานรายวันกำลังอัปเดตข้อมูล ต้องล็อกอินด้วยรหัสผ่านก่อนเข้า
+
+```bash
+pip install -r dashboard/requirements.txt
+python dashboard/app.py set-password   # ตั้งรหัสผ่าน (เก็บเป็น hash ใน .env)
+python dashboard/app.py                # http://127.0.0.1:5021
+```
+
+บน VPS ให้รันด้วย Docker (user ที่อยู่ในกลุ่ม docker ไม่ต้องใช้ sudo) container จะ mount โฟลเดอร์ repo เข้าไปเลย เว็บจึงเห็นข้อมูลใหม่ทุกวันโดยไม่ต้อง restart:
+
+```bash
+cd ~/RestoSuite-Report
+.venv/bin/pip install -r dashboard/requirements.txt
+.venv/bin/python dashboard/app.py set-password
+docker build -t restosuite-dashboard -f dashboard/Dockerfile .
+docker run -d --name restosuite-dashboard --restart unless-stopped \
+  -p 127.0.0.1:5021:5021 -v "$PWD":/app --env-file .env restosuite-dashboard
+```
+
+เปิดให้เข้าจากภายนอกด้วย nginx + HTTPS ตามคำสั่งใน `deploy/nginx-dashboard.conf` (ต้องใช้ sudo และต้องตั้ง DNS ของโดเมนให้ชี้มาที่ VPS ก่อน) ถ้าอัปเดตโค้ดหรือเปลี่ยนรหัสผ่าน ให้รัน `git pull && docker restart restosuite-dashboard`
+
 ## ข้อควรรู้
 
 - token จะใช้ไม่ได้เมื่อ log out จาก RestoSuite ถ้าสคริปต์บอกว่า token หมดอายุ ให้ล็อกอินใหม่แล้วอัปเดต `RESTOSUITE_TOKEN`

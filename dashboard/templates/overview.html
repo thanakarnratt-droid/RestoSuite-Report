@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% macro tile(label, value, cur_v, prev_v, up_good=True, hero=False) %}
+  {% set d = delta(cur_v, prev_v) %}
+  <div class="card tile {{ 'hero' if hero }}">
+    <div class="tile-label">{{ label }}</div>
+    <div class="tile-value">{{ value }}</div>
+    {% if d is not none %}
+      {% set good = (d >= 0) == up_good %}
+      <div class="tile-delta {{ 'good' if good else 'bad' }}">
+        <span aria-hidden="true">{{ '▲' if d >= 0 else '▼' }}</span>
+        {{ '%+.1f'|format(d) }}% <span class="muted">เทียบช่วงก่อนหน้า</span>
+      </div>
+    {% else %}
+      <div class="tile-delta muted">ไม่มีข้อมูลช่วงก่อนหน้า</div>
+    {% endif %}
+  </div>
+{% endmacro %}
+{% block content %}
+<section class="tiles">
+  {{ tile("ยอดขายสุทธิ", cur.net|baht, cur.net, prev.net, hero=True) }}
+  {{ tile("จำนวนออเดอร์", cur.orders|num, cur.orders, prev.orders) }}
+  {{ tile("ยอดเฉลี่ยต่อออเดอร์", cur.avg_order|baht(2), cur.avg_order, prev.avg_order) }}
+  {{ tile("ยอดขายเฉลี่ยต่อวัน", cur.per_day|baht, cur.per_day, prev.per_day) }}
+  {{ tile("จำนวนลูกค้า", cur.guests|num, cur.guests, prev.guests) }}
+  {{ tile("ยอดขายก่อนหักส่วนลด", cur.gross|baht, cur.gross, prev.gross) }}
+  {{ tile("ส่วนลดรวม", cur.discount|baht, cur.discount, prev.discount, up_good=False) }}
+</section>
+<p class="muted note">ช่วงก่อนหน้า = จำนวนวันเท่ากันก่อนวันที่ {{ start }} · มีการขาย {{ cur.days }} วันในช่วงนี้</p>
+{% include "_charts.html" %}
+{% endblock %}

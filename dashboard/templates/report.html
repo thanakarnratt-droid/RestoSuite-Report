@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block content %}
+{% if summary %}
+<section class="tiles compact">
+  <div class="card tile"><div class="tile-label">ยอดขายสุทธิ</div><div class="tile-value">{{ summary.net|baht }}</div></div>
+  <div class="card tile"><div class="tile-label">จำนวนออเดอร์</div><div class="tile-value">{{ summary.orders|num }}</div></div>
+  <div class="card tile"><div class="tile-label">ยอดเฉลี่ยต่อออเดอร์</div><div class="tile-value">{{ summary.avg_order|baht(2) }}</div></div>
+  <div class="card tile"><div class="tile-label">จำนวนลูกค้า</div><div class="tile-value">{{ summary.guests|num }}</div></div>
+</section>
+{% endif %}
+
+{% include "_charts.html" %}
+
+{% if agg %}
+<section class="card table-card">
+  <div class="table-head"><h2>สรุปตามรายการ</h2><span class="muted">{{ agg.rows|length|num }} รายการ</span></div>
+  <div class="table-scroll">
+    <table class="data">
+      <thead><tr>{% for c, label in agg.cols %}<th scope="col">{{ label }}</th>{% endfor %}</tr></thead>
+      <tbody>
+      {% for r in agg.rows %}
+        <tr>{% for c, _ in agg.cols %}{% set v = r[c] %}<td class="{{ 'num' if v is number }}">{{ v|cell(c) }}</td>{% endfor %}</tr>
+      {% else %}
+        <tr><td colspan="{{ agg.cols|length }}" class="empty">ไม่มีข้อมูลในช่วงนี้</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+{% if tbl %}
+<section class="card table-card">
+  <div class="table-head">
+    <h2>รายการทั้งหมด</h2>
+    <span class="muted">{{ tbl.total|num }} แถว</span>
+    {% if tbl.search_col %}
+      <form method="get" class="search">
+        <input type="hidden" name="from" value="{{ start }}"><input type="hidden" name="to" value="{{ end }}">
+        <input type="search" name="q" value="{{ tbl.search }}" placeholder="ค้นหาเลขออเดอร์" aria-label="ค้นหาเลขออเดอร์">
+      </form>
+    {% endif %}
+  </div>
+  <div class="table-scroll">
+    <table class="data">
+      <thead><tr>{% for c, label in tbl.cols %}<th scope="col">{{ label }}</th>{% endfor %}</tr></thead>
+      <tbody>
+      {% for r in tbl.rows %}
+        <tr>{% for c, _ in tbl.cols %}{% set v = r[c] %}<td class="{{ 'num' if v is number and c not in ('pos_order_id', 'order_id') }}">{{ v|cell(c) if c not in ('pos_order_id', 'order_id') else (v or '–') }}</td>{% endfor %}</tr>
+      {% else %}
+        <tr><td colspan="{{ tbl.cols|length }}" class="empty">ไม่มีข้อมูลในช่วงนี้</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if tbl.pages > 1 %}
+  <nav class="pager" aria-label="หน้า">
+    {% if tbl.page > 1 %}<a href="{{ page_url(page=tbl.page - 1) }}">‹ ก่อนหน้า</a>{% endif %}
+    <span>หน้า {{ tbl.page }} / {{ tbl.pages }}</span>
+    {% if tbl.page < tbl.pages %}<a href="{{ page_url(page=tbl.page + 1) }}">ถัดไป ›</a>{% endif %}
+  </nav>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}
