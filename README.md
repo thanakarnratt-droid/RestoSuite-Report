@@ -137,7 +137,7 @@ docker run -d --name restosuite-dashboard --restart unless-stopped \
   -p 127.0.0.1:5021:5021 -v "$PWD":/app restosuite-dashboard
 ```
 
-เปิดให้เข้าจากภายนอกด้วย nginx + HTTPS ตามคำสั่งใน `deploy/nginx-dashboard.conf` (ต้องใช้ sudo และต้องตั้ง DNS ของโดเมนให้ชี้มาที่ VPS ก่อน) ถ้าอัปเดตโค้ดหรือเปลี่ยนรหัสผ่าน ให้รัน `git pull && docker restart restosuite-dashboard`
+เปิดให้เข้าจากภายนอกที่ https://report.spicycatgroups.com: เพิ่ม DNS record `report` ให้ชี้มาที่ VPS ก่อน แล้วรัน `sudo sh deploy/setup-nginx.sh` สคริปต์จะติดตั้ง nginx site จาก `deploy/nginx-dashboard.conf` และขอ HTTPS certificate จาก Let's Encrypt ด้วย certbot ถ้า config ของ nginx ไม่ผ่าน สคริปต์จะถอยกลับให้เหมือนเดิม ถ้าอัปเดตโค้ดหรือเปลี่ยนรหัสผ่าน ให้รัน `git pull && docker restart restosuite-dashboard`
 
 ## ข้อควรรู้
 
