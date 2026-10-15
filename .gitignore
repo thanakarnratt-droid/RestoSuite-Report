@@ -7,3 +7,4 @@ restosuite-orders-*.xlsx
 restosuite.db
 *.db
 export/
+logs/

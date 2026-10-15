@@ -103,6 +103,17 @@ sudo systemctl start restosuite-export.service     # สั่งรันทั
 journalctl -u restosuite-export -n 50              # ดู log ของรอบล่าสุด
 ```
 
+**ไม่มีสิทธิ์ sudo:** ใช้ cron ของ user แทน systemd ได้ (cron ไม่รันย้อนหลังถ้าเครื่องปิดอยู่ตอนถึงเวลา) ถ้า server ตั้งเวลาเป็น UTC ให้ใช้ 21:00 UTC ซึ่งตรงกับ 04:00 เวลาไทย:
+
+```bash
+mkdir -p ~/RestoSuite-Report/logs
+crontab -e
+# เพิ่มบรรทัดนี้:
+0 21 * * * PYTHONIOENCODING=utf-8 /home/dev_sc/RestoSuite-Report/deploy/run-daily.sh >> /home/dev_sc/RestoSuite-Report/logs/export.log 2>&1
+```
+
+log อยู่ที่ `logs/export.log` ดูรอบล่าสุดได้ด้วย `tail -20 ~/RestoSuite-Report/logs/export.log`
+
 ถ้า log บอกว่า token หมดอายุ หรือยอดรวมไม่ตรง งานรอบนั้นจะจบด้วยสถานะ failed (ดูได้จาก `systemctl status restosuite-export`) ให้อัปเดต token ใน `.env` แล้วสั่งรันใหม่
 
 ## ข้อควรรู้
