@@ -21,7 +21,7 @@
   {{ tile("จำนวนออเดอร์", cur.orders|num, cur.orders, prev.orders) }}
   {{ tile("ยอดเฉลี่ยต่อออเดอร์", cur.avg_order|baht(2), cur.avg_order, prev.avg_order) }}
   {{ tile("ยอดขายเฉลี่ยต่อวัน", cur.per_day|baht, cur.per_day, prev.per_day) }}
-  {{ tile("จำนวนลูกค้า", cur.guests|num, cur.guests, prev.guests) }}
+  {{ tile("สินค้าที่ขายได้ (ชิ้น)", cur.items_sold|num, cur.items_sold, prev.items_sold) }}
   {{ tile("ยอดขายก่อนหักส่วนลด", cur.gross|baht, cur.gross, prev.gross) }}
   {{ tile("ส่วนลดรวม", cur.discount|baht, cur.discount, prev.discount, up_good=False) }}
 </section>

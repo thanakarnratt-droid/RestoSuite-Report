@@ -237,7 +237,11 @@ def convert_rows(cfg, labels, rows):
     columns = []
     for f in fields:
         if f.startswith("D_"):
-            columns.append((names[f], "TEXT", f, labels.get(f, f)))
+            # Money shown as text (e.g. item price "฿155.00") was converted to a number above;
+            # a REAL column keeps it one, where TEXT affinity would turn it back into "155.0".
+            values = [r[names[f]] for r in converted if r[names[f]] is not None]
+            numeric = bool(values) and all(isinstance(v, float) for v in values)
+            columns.append((names[f], "REAL" if numeric else "TEXT", f, labels.get(f, f)))
             if f in raw_seen:
                 columns.append((names[f] + "_code", "TEXT", f, labels.get(f, f) + " (code)"))
         else:
@@ -245,6 +249,20 @@ def convert_rows(cfg, labels, rows):
             columns.append((names[f], "INTEGER" if is_int else "REAL", f, labels.get(f, f)))
 
     return columns, converted
+
+
+def retype_columns(db, table, real_cols):
+    """Rebuild a table so the given TEXT columns become REAL (SQLite cannot ALTER a column's type).
+
+    Databases exported before price fields were numeric stored item_price as text.
+    """
+    info = [(r[1], r[2]) for r in db.execute(f'PRAGMA table_info("{table}")')]
+    cols = ", ".join(f'"{c}" {"REAL" if c in real_cols else t}' for c, t in info)
+    select = ", ".join(f'CAST("{c}" AS REAL)' if c in real_cols else f'"{c}"' for c, _ in info)
+    db.execute(f'CREATE TABLE "{table}__new" ({cols})')
+    db.execute(f'INSERT INTO "{table}__new" SELECT {select} FROM "{table}"')
+    db.execute(f'DROP TABLE "{table}"')  # also drops its indexes; ensure_table recreates them
+    db.execute(f'ALTER TABLE "{table}__new" RENAME TO "{table}"')
 
 
 def ensure_table(db, table, columns):
@@ -255,7 +273,11 @@ def ensure_table(db, table, columns):
         db.executemany("INSERT INTO _columns VALUES (?, ?, ?, ?, ?)",
                        [(table, i, c, f, label) for i, (c, _, f, label) in enumerate(columns)])
     else:
-        existing = [r[1] for r in db.execute(f'PRAGMA table_info("{table}")')]
+        info = {r[1]: r[2] for r in db.execute(f'PRAGMA table_info("{table}")')}
+        stale = {c for c, t, *_ in columns if t == "REAL" and info.get(c) == "TEXT"}
+        if stale:
+            retype_columns(db, table, stale)
+        existing = list(info)
         position = len(existing)
         for c, t, f, label in columns:
             if c not in existing:
@@ -267,6 +289,10 @@ def ensure_table(db, table, columns):
     for col in ("pos_order_id", "order_id"):
         if any(c == col for c, *_ in columns):
             db.execute(f'CREATE INDEX IF NOT EXISTS "ix_{table}_{col}" ON "{table}" ("{col}")')
+    # The views join order-level tables on (shop_id, pos_order_id); without this the planner
+    # can pick the (shop_id, business_date) index and scan a whole store per row.
+    if any(c == "pos_order_id" for c, *_ in columns):
+        db.execute(f'CREATE INDEX IF NOT EXISTS "ix_{table}_shop_order" ON "{table}" ("shop_id", "pos_order_id")')
 
 
 def replace_rows(db, table, columns, converted, shop_id, start=None, end=None):
@@ -345,11 +371,24 @@ SCHEMA = """
 
 
 def prepare_db(db):
+    # Views are rebuilt at the end of every run; dropping them first means a table rebuild
+    # (see retype_columns) never trips over a view that points at it.
+    for (name,) in db.execute("SELECT name FROM sqlite_master WHERE type = 'view'").fetchall():
+        db.execute(f'DROP VIEW "{name}"')
     # Databases from before multi-store support kept one _exports row per table.
     cols = [r[1] for r in db.execute("PRAGMA table_info(_exports)")]
     if cols and "shop_id" not in cols:
         db.execute("DROP TABLE _exports")
     db.executescript(SCHEMA)
+
+
+def create_views(db):
+    """Create the cleaned v_* views from views.sql once every table they read exists."""
+    if not all(table_exists(db, r["table"]) for r in REPORTS):
+        click.echo("ยังไม่ครบทุกตาราง ข้ามการสร้าง view", err=True)
+        return
+    db.executescript((ROOT / "views.sql").read_text(encoding="utf-8"))
+    db.execute("ANALYZE")  # table statistics so SQLite picks good join plans for the views
 
 
 def update_shops(db, shops):
@@ -471,6 +510,8 @@ def main(start, end, days, shops, db_path, csv_dir, only, rebuild, currency):
         if csv_dir and table_exists(db, table):
             dump_csv(db, table, csv_dir / f"{table}.csv")
     update_shops(db, targets)
+    db.commit()
+    create_views(db)
     db.commit()
     db.close()
 

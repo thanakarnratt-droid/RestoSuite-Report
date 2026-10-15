@@ -5,7 +5,7 @@
   <div class="card tile"><div class="tile-label">ยอดขายสุทธิ</div><div class="tile-value">{{ summary.net|baht }}</div></div>
   <div class="card tile"><div class="tile-label">จำนวนออเดอร์</div><div class="tile-value">{{ summary.orders|num }}</div></div>
   <div class="card tile"><div class="tile-label">ยอดเฉลี่ยต่อออเดอร์</div><div class="tile-value">{{ summary.avg_order|baht(2) }}</div></div>
-  <div class="card tile"><div class="tile-label">จำนวนลูกค้า</div><div class="tile-value">{{ summary.guests|num }}</div></div>
+  <div class="card tile"><div class="tile-label">สินค้าที่ขายได้ (ชิ้น)</div><div class="tile-value">{{ summary.items_sold|num }}</div></div>
 </section>
 {% endif %}
 

@@ -86,6 +86,7 @@ main { padding: 24px 28px 48px; min-width: 0; }
 /* header + filters */
 .page-head { display: flex; flex-wrap: wrap; gap: 16px; justify-content: space-between; align-items: flex-end; margin-bottom: 20px; }
 .page-head p { margin: 4px 0 0; font-size: 13px; }
+.partial-note { color: var(--bad); }
 .filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .filters label { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-2); }
 input[type=date], input[type=search], input[type=password], select {

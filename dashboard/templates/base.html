@@ -47,6 +47,7 @@
         <p class="muted">
           {% if report != "Overview" %}รายงาน {{ report }} · {% endif %}ข้อมูลถึง {{ last }} · อัปเดตล่าสุด {{ exported.replace('T', ' ') if exported else '–' }}
         </p>
+        {% if includes_today %}<p class="partial-note">ช่วงที่เลือกมีวันนี้รวมอยู่ด้วย ยอดของวันนี้ยังไม่ครบ เพราะร้านยังขายอยู่</p>{% endif %}
       </div>
       <form class="filters" method="get">
         {% if shops|length > 1 %}
@@ -60,7 +61,7 @@
         <label>ตั้งแต่ <input type="date" name="from" value="{{ start }}" min="{{ first }}" max="{{ last }}"></label>
         <label>ถึง <input type="date" name="to" value="{{ end }}" min="{{ first }}" max="{{ last }}"></label>
         <button type="submit" class="primary">แสดง</button>
-        <div class="presets" data-last="{{ last }}" data-first="{{ first }}">
+        <div class="presets" data-last="{{ last_complete }}" data-first="{{ first }}">
           <button type="button" data-days="7">7 วัน</button>
           <button type="button" data-days="30">30 วัน</button>
           <button type="button" data-month="this">เดือนนี้</button>

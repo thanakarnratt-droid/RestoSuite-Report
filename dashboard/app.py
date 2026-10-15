@@ -22,7 +22,7 @@ import secrets
 import sqlite3
 import sys
 import time
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from functools import wraps
 from pathlib import Path
 
@@ -127,13 +127,25 @@ def logout():
 
 # --- filters ------------------------------------------------------------------
 
-def date_range():
-    """(start, end) from ?from=&to=, defaulting to the last 30 days that have data."""
+BANGKOK = timezone(timedelta(hours=7))  # no daylight saving in Thailand
+
+
+def store_today():
+    return datetime.now(BANGKOK).date()
+
+
+def last_complete_day():
+    """The latest business day that has finished: today's sales are still coming in."""
     scope, sp = shop_scope()
-    last = q1(f"SELECT MAX(business_date) FROM sales_daily{scope}", sp)
-    last_d = date.fromisoformat(last) if last else date.today()
+    last = q1(f"SELECT MAX(business_date) FROM sales_daily{scope} {'AND' if scope else 'WHERE'} business_date < ?",
+              (*sp, store_today().isoformat()))
+    return date.fromisoformat(last) if last else store_today() - timedelta(days=1)
+
+
+def date_range():
+    """(start, end) from ?from=&to=, defaulting to the 30 days up to the last finished day."""
     try:
-        end = date.fromisoformat(request.args["to"]) if request.args.get("to") else last_d
+        end = date.fromisoformat(request.args["to"]) if request.args.get("to") else last_complete_day()
         start = date.fromisoformat(request.args["from"]) if request.args.get("from") else end - timedelta(days=29)
     except ValueError:
         abort(400, "วันที่ไม่ถูกต้อง")
@@ -159,10 +171,12 @@ def page_context(key, start, end, **extra):
     specs = list(CHART_SPECS.get(key, []))
     if key == "overview" and len(shops()) > 1 and not shop:
         specs.insert(1, ("by_shop", "ยอดขายสุทธิตามสาขา", "hbar", "money"))
+    today = store_today()
     return dict(pages=PAGES, active=key, title=title, report=report, specs=specs, shops=shops(), shop=shop,
                 shop_name=dict(shops()).get(shop) if shop else None,
-                start=start.isoformat(),
-                end=end.isoformat(), first=first, last=last, exported=exported, **extra)
+                start=start.isoformat(), end=end.isoformat(), first=first, last=last,
+                last_complete=last_complete_day().isoformat(), includes_today=start <= today <= end,
+                exported=exported, **extra)
 
 
 def export_cols():
@@ -173,7 +187,8 @@ def table_page(table, where, params, order, columns=None, search_col=None):
     """Rows for a paginated table plus paging info."""
     labels = labels_for(table)
     # Store name only matters when several stores are shown together.
-    hidden = {"shop_id", "shop_code"} | ({"shop_name"} if selected_shop() or len(shops()) < 2 else set())
+    hidden = {"shop_id", "shop_code", "guests", "net_sales_by_guest"} | (
+        {"shop_name"} if selected_shop() or len(shops()) < 2 else set())
     cols = [c for c in (columns or [c for c in labels if not c.endswith("_code")]) if c not in hidden]
     search = request.args.get("q", "").strip()
     if search and search_col:
@@ -255,18 +270,20 @@ def hourly(start, end):
 
 def daily_sales(start, end):
     w, p = where(start, end)
-    return q(f"""SELECT business_date AS d, SUM(net_sales) AS net, SUM(orders) AS orders, SUM(guests) AS guests
+    return q(f"""SELECT business_date AS d, SUM(net_sales) AS net, SUM(orders) AS orders
                  FROM sales_daily WHERE {w} GROUP BY d ORDER BY d""", p)
 
 
 def kpis(start, end):
+    # No guest count: the POS records one guest per bill, so it would just repeat the order count.
     w, p = where(start, end)
     row = db().execute(f"""SELECT COALESCE(SUM(net_sales), 0) AS net, COALESCE(SUM(orders), 0) AS orders,
-                                  COALESCE(SUM(guests), 0) AS guests, COALESCE(SUM(total_gross_sales), 0) AS gross
+                                  COALESCE(SUM(total_gross_sales), 0) AS gross
                            FROM sales_daily WHERE {w}""", p).fetchone()
     disc = q1(f"SELECT COALESCE(SUM(amount), 0) FROM discounts_daily WHERE {w}", p)
+    items = q1(f"SELECT COALESCE(SUM(net_qty), 0) FROM order_items WHERE {w}", p)
     days = q1(f"SELECT COUNT(DISTINCT business_date) FROM sales_daily WHERE {w} AND orders > 0", p) or 0
-    return {"net": row["net"], "orders": row["orders"], "guests": row["guests"], "gross": row["gross"],
+    return {"net": row["net"], "orders": row["orders"], "items_sold": items, "gross": row["gross"],
             "discount": disc, "avg_order": row["net"] / row["orders"] if row["orders"] else 0,
             "per_day": row["net"] / days if days else 0, "days": days}
 
