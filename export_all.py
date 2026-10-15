@@ -8,6 +8,7 @@ tables from scratch, so it is safe to re-run.
     python export_all.py                         # all time, into restosuite.db
     python export_all.py --from 2026-10-01 --to 2026-10-14 --db october.db
     python export_all.py --csv-dir export        # also write one CSV per table
+    python export_all.py --days 7 --csv-dir export   # daily job: refresh only the last 7 days
 
 Uses the same .env settings as restosuite_orders.py.
 """
@@ -22,7 +23,7 @@ from pathlib import Path
 
 import click
 
-from restosuite_orders import ROOT, RestoSuite, load_dotenv, require_env
+from restosuite_orders import ROOT, RestoSuite, load_dotenv, require_env, today
 
 COMPLETED = ["20"]  # order status the report pages filter on by default
 PAYMENT_ORDER_TYPES = ["1100", "1200", "1300"]
@@ -209,7 +210,7 @@ def build_filters(cfg, start, end, shop_ids, currency):
     return filters
 
 
-def write_table(db, cfg, labels, rows):
+def convert_rows(cfg, labels, rows):
     fields = cfg["fields"]
     names = column_names(fields)
     dims = [f for f in fields if f.startswith("D_")]
@@ -239,32 +240,60 @@ def write_table(db, cfg, labels, rows):
             is_int = all(isinstance(r[names[f]], int) or r[names[f]] is None for r in converted)
             columns.append((names[f], "INTEGER" if is_int else "REAL", f, labels.get(f, f)))
 
-    table = cfg["table"]
+    return columns, converted
+
+
+def store_full(db, table, columns, converted):
+    """Replace the whole table."""
     db.execute(f'DROP TABLE IF EXISTS "{table}"')
     db.execute(f'CREATE TABLE "{table}" (' + ", ".join(f'"{c}" {t}' for c, t, _, _ in columns) + ")")
-    col_list = ", ".join(f'"{c}"' for c, *_ in columns)
-    marks = ", ".join("?" for _ in columns)
-    db.executemany(f'INSERT INTO "{table}" ({col_list}) VALUES ({marks})',
-                   [[r.get(c) for c, *_ in columns] for r in converted])
+    insert(db, table, columns, converted)
     for col in ("business_date", "pos_order_id", "order_id"):
         if any(c == col for c, *_ in columns):
             db.execute(f'CREATE INDEX "ix_{table}_{col}" ON "{table}" ("{col}")')
     db.execute("DELETE FROM _columns WHERE table_name = ?", (table,))
     db.executemany("INSERT INTO _columns VALUES (?, ?, ?, ?, ?)",
                    [(table, i, c, f, label) for i, (c, _, f, label) in enumerate(columns)])
-    return columns, converted
 
 
-def write_csv(path, columns, rows):
+def store_window(db, table, columns, converted, start, end):
+    """Replace only the rows whose business date falls in [start, end]."""
+    existing = [r[1] for r in db.execute(f'PRAGMA table_info("{table}")')]
+    position = len(existing)
+    for c, t, f, label in columns:
+        if c not in existing:  # e.g. a code column that first shows up in new data
+            db.execute(f'ALTER TABLE "{table}" ADD COLUMN "{c}" {t}')
+            db.execute("INSERT INTO _columns VALUES (?, ?, ?, ?, ?)", (table, position, c, f, label))
+            position += 1
+    db.execute(f'DELETE FROM "{table}" WHERE business_date BETWEEN ? AND ?', (start.isoformat(), end.isoformat()))
+    insert(db, table, columns, converted)
+
+
+def insert(db, table, columns, converted):
+    col_list = ", ".join(f'"{c}"' for c, *_ in columns)
+    marks = ", ".join("?" for _ in columns)
+    db.executemany(f'INSERT INTO "{table}" ({col_list}) VALUES ({marks})',
+                   [[r.get(c) for c, *_ in columns] for r in converted])
+
+
+def table_exists(db, table):
+    return db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (table,)).fetchone()
+
+
+def dump_csv(db, table, path):
+    """Write the whole table (not just this run's rows) with the report's column labels."""
+    labels = dict(db.execute("SELECT column_name, label FROM _columns WHERE table_name = ?", (table,)))
+    cur = db.execute(f'SELECT * FROM "{table}" ORDER BY business_date, rowid')
+    names = [d[0] for d in cur.description]
     with open(path, "w", newline="", encoding="utf-8-sig") as f:
         writer = csv.writer(f)
-        writer.writerow([label for *_, label in columns])
-        writer.writerows([r.get(c) for c, *_ in columns] for r in rows)
+        writer.writerow([labels.get(n, n) for n in names])
+        writer.writerows(cur)
 
 
 def first_business_date(api, shop_ids, currency):
     cfg = next(r for r in REPORTS if r["table"] == "sales_daily")
-    filters = build_filters(cfg, date(2000, 1, 1), date.today(), shop_ids, currency)
+    filters = build_filters(cfg, date(2000, 1, 1), today(), shop_ids, currency)
     for row in api.query_rows(cfg["report_id"], ["D_businessDate", "M_Order_COUNT_Orders"], filters,
                               [{"D_businessDate": "ASC"}]):
         return date.fromisoformat(row["D_businessDate"]["value"])
@@ -274,6 +303,8 @@ def first_business_date(api, shop_ids, currency):
 @click.command()
 @click.option("--from", "start", help="วันเริ่ม YYYY-MM-DD (ค่าเริ่มต้น: วันแรกที่ร้านมีข้อมูล)")
 @click.option("--to", "end", help="วันสิ้นสุด YYYY-MM-DD (ค่าเริ่มต้น: วันนี้)")
+@click.option("--days", type=click.IntRange(min=1),
+              help="อัปเดตเฉพาะ N วันล่าสุดในฐานข้อมูลเดิม (สำหรับงานรายวัน) ใช้แทน --from")
 @click.option("--shop", "shops", multiple=True, help="Store ID (ใส่ซ้ำได้) แทน RESTOSUITE_SHOP_IDS")
 @click.option("--db", "db_path", type=click.Path(dir_okay=False, path_type=Path),
               default=Path("restosuite.db"), show_default=True, help="ไฟล์ SQLite")
@@ -281,15 +312,21 @@ def first_business_date(api, shop_ids, currency):
 @click.option("--only", multiple=True, type=click.Choice([r["table"] for r in REPORTS]),
               help="เลือกเฉพาะบางตาราง (ใส่ซ้ำได้)")
 @click.option("--currency", default="THB", show_default=True)
-def main(start, end, shops, db_path, csv_dir, only, currency):
+def main(start, end, days, shops, db_path, csv_dir, only, currency):
     """Export the RestoSuite Common Reports into a SQLite database."""
+    if days and start:
+        raise click.UsageError("ใช้ --days กับ --from พร้อมกันไม่ได้")
     load_dotenv(ROOT / ".env")
     shop_ids = list(shops) or [s.strip() for s in require_env("RESTOSUITE_SHOP_IDS").split(",") if s.strip()]
     api = RestoSuite(require_env("RESTOSUITE_TOKEN"), shop_ids)
 
-    end_d = date.fromisoformat(end) if end else date.today()
-    start_d = date.fromisoformat(start) if start else first_business_date(api, shop_ids, currency)
-    click.echo(f"ช่วงข้อมูล {start_d} ถึง {end_d} ร้าน {', '.join(shop_ids)}", err=True)
+    end_d = date.fromisoformat(end) if end else today()
+    if days:
+        start_d = end_d - timedelta(days=days - 1)
+    else:
+        start_d = date.fromisoformat(start) if start else first_business_date(api, shop_ids, currency)
+    click.echo(f"ช่วงข้อมูล {start_d} ถึง {end_d} ร้าน {', '.join(shop_ids)}"
+               + (" (อัปเดตเฉพาะช่วงนี้)" if days else ""), err=True)
 
     db = sqlite3.connect(db_path)
     db.executescript("""
@@ -309,7 +346,14 @@ def main(start, end, shops, db_path, csv_dir, only, currency):
         click.echo(f"[{cfg['table']}] {cfg['title']} (report {cfg['report_id']})", err=True)
         labels = api.field_labels(cfg["report_id"])
         rows = fetch_report(api, cfg, start_d, end_d, shop_ids, currency)
-        columns, converted = write_table(db, cfg, labels, rows)
+        columns, converted = convert_rows(cfg, labels, rows)
+        table = cfg["table"]
+        # A table that does not exist yet is built in full, even in --days mode.
+        incremental = bool(days and table_exists(db, table))
+        if incremental:
+            store_window(db, table, columns, converted, start_d, end_d)
+        else:
+            store_full(db, table, columns, converted)
 
         # Compare our sums with the totals RestoSuite computes for the whole range.
         expected = api.query_totals(cfg["report_id"], cfg["totals"],
@@ -322,15 +366,20 @@ def main(start, end, shops, db_path, csv_dir, only, currency):
             check[m] = {"expected": str(want), "exported": str(got), "ok": got == want}
             if got != want:
                 problems.append(f"{cfg['table']}.{names[m]}: RestoSuite {want} แต่ได้ {got}")
+        date_from = start_d.isoformat()
+        if incremental:
+            prev = db.execute("SELECT date_from FROM _exports WHERE table_name = ?", (table,)).fetchone()
+            date_from = min(prev[0], date_from) if prev else date_from
+        row_count = db.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0]
         db.execute("INSERT OR REPLACE INTO _exports VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                   (cfg["table"], cfg["report_id"], cfg["title"], ",".join(shop_ids), start_d.isoformat(),
-                    end_d.isoformat(), len(converted), datetime.now().isoformat(timespec="seconds"),
-                    json.dumps(check)))
+                   (table, cfg["report_id"], cfg["title"], ",".join(shop_ids), date_from, end_d.isoformat(),
+                    row_count, datetime.now().isoformat(timespec="seconds"), json.dumps(check)))
         db.commit()
         status = "ตรง" if all(c["ok"] for c in check.values()) else "ไม่ตรง!"
-        click.echo(f"  -> {len(converted)} แถว, ยอดรวมเทียบกับ RestoSuite: {status}", err=True)
+        click.echo(f"  -> {len(converted)} แถว (ทั้งตาราง {row_count}), ยอดรวมเทียบกับ RestoSuite: {status}",
+                   err=True)
         if csv_dir:
-            write_csv(csv_dir / f"{cfg['table']}.csv", columns, converted)
+            dump_csv(db, table, csv_dir / f"{table}.csv")
     db.close()
 
     click.echo(f"บันทึกลง {db_path}" + (f" และ CSV ใน {csv_dir}" if csv_dir else ""), err=True)

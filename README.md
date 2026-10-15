@@ -51,6 +51,7 @@ python export_all.py                                   # ทั้งหมด �
 python export_all.py --csv-dir export                  # และเขียน CSV ทุกตารางลง export/
 python export_all.py --from 2026-10-01 --to 2026-10-14 --db october.db
 python export_all.py --only orders --only order_items  # เฉพาะบางตาราง
+python export_all.py --days 7 --csv-dir export         # อัปเดตเฉพาะ 7 วันล่าสุด (งานรายวัน)
 ```
 
 | ตาราง | รายงาน | 1 แถว = |
@@ -68,8 +69,41 @@ python export_all.py --only orders --only order_items  # เฉพาะบา�
 - `_columns` บอกว่าแต่ละคอลัมน์มาจาก field ไหน และชื่อบนหน้าเว็บคืออะไร
 - `_exports` บันทึกช่วงวันที่ จำนวนแถว และผลเทียบยอดรวม
 - หลังดึงแต่ละตาราง สคริปต์จะเทียบยอดรวม เช่น Net Sales กับยอดที่ RestoSuite คำนวณเอง ถ้าไม่ตรงจะแจ้งและจบด้วย exit code 1
-- ทุกครั้งที่รัน ตารางจะถูกสร้างใหม่ทั้งหมด รันซ้ำได้โดยไม่เกิดข้อมูลซ้ำ
+- ถ้าไม่ใส่ `--days` ตารางจะถูกสร้างใหม่ทั้งหมด ถ้าใส่ `--days N` จะลบแล้วดึงใหม่เฉพาะ N วันล่าสุด ส่วนข้อมูลเก่ายังอยู่ ทั้งสองแบบรันซ้ำได้โดยไม่เกิดข้อมูลซ้ำ
+- CSV ใน `--csv-dir` เป็นข้อมูลทั้งตารางเสมอ ไม่ใช่แค่ช่วงที่ดึงรอบนั้น
 - ดึงเฉพาะออเดอร์ที่สถานะ "เสร็จสิ้น" (status 20) เหมือนค่าเริ่มต้นของหน้า report
+
+## ตั้งให้อัปเดตทุกวันบน VPS
+
+ใช้ systemd timer รัน `deploy/run-daily.sh` ทุกวันเวลา 04:00 (เวลาไทย) สคริปต์จะดึงข้อมูล 7 วันล่าสุดใหม่ทุกครั้ง เพื่อเก็บการคืนเงินหรือการแก้ไขที่เกิดหลังปิดวันด้วย แล้วอัปเดต `restosuite.db` และ `export/*.csv` ในโฟลเดอร์ของ repo ถ้าเครื่องปิดอยู่ตอน 04:00 จะรันทันทีเมื่อเปิดเครื่อง
+
+ติดตั้งบน VPS (Ubuntu/Debian):
+
+```bash
+git clone https://github.com/thanakarnratt-droid/RestoSuite-Report.git ~/RestoSuite-Report
+cd ~/RestoSuite-Report
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+cp .env.example .env && nano .env          # กรอก token และ ID ต่างๆ
+chmod +x deploy/run-daily.sh
+
+# รอบแรก: ดึงข้อมูลทั้งหมด (หรือคัดลอก restosuite.db จากเครื่องอื่นมาวางแทนก็ได้)
+.venv/bin/python export_all.py --csv-dir export
+
+# ตั้งเวลา (ถ้าใช้ user หรือโฟลเดอร์อื่นที่ไม่ใช่ dev_sc / ~/RestoSuite-Report ให้แก้ใน .service ก่อน)
+sudo cp deploy/restosuite-export.service deploy/restosuite-export.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now restosuite-export.timer
+```
+
+ตรวจสอบ:
+
+```bash
+systemctl list-timers restosuite-export.timer      # รอบถัดไปเมื่อไร
+sudo systemctl start restosuite-export.service     # สั่งรันทันที
+journalctl -u restosuite-export -n 50              # ดู log ของรอบล่าสุด
+```
+
+ถ้า log บอกว่า token หมดอายุ หรือยอดรวมไม่ตรง งานรอบนั้นจะจบด้วยสถานะ failed (ดูได้จาก `systemctl status restosuite-export`) ให้อัปเดต token ใน `.env` แล้วสั่งรันใหม่
 
 ## ข้อควรรู้
 

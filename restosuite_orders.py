@@ -23,7 +23,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import click
@@ -71,6 +71,15 @@ def load_dotenv(path):
             continue
         key, value = line.split("=", 1)
         os.environ.setdefault(key.strip(), value.strip().strip("'\""))
+
+
+def today():
+    """Today in the store's timezone, so a server running on UTC still gets the right business day."""
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo(os.environ.get("RESTOSUITE_TIMEZONE", "Asia/Bangkok"))).date()
+    except Exception:  # no timezone database, e.g. Windows without the tzdata package
+        return date.today()
 
 
 def require_env(name):
@@ -233,7 +242,7 @@ def write_xlsx(path, headers, rows):
 def main(start, end, shops, fmt, out, statuses, currency):
     """Download the RestoSuite Orders report for a date range."""
     load_dotenv(ROOT / ".env")
-    start = start or (date.today() - timedelta(days=1)).isoformat()
+    start = start or (today() - timedelta(days=1)).isoformat()
     end = end or start
     for d in (start, end):
         try:

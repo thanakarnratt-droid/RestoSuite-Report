@@ -1,0 +1,11 @@
+[Unit]
+Description=Export RestoSuite reports to SQLite and CSV
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+# Change User and the paths if the repository is cloned somewhere else.
+User=dev_sc
+WorkingDirectory=/home/dev_sc/RestoSuite-Report
+ExecStart=/home/dev_sc/RestoSuite-Report/deploy/run-daily.sh

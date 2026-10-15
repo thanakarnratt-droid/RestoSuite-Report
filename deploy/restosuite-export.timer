@@ -1,0 +1,12 @@
+[Unit]
+Description=Run the RestoSuite export every day
+
+[Timer]
+# 04:00 Bangkok time, after the store has closed the business day.
+OnCalendar=*-*-* 04:00:00 Asia/Bangkok
+# Run at the next boot if the server was off at 04:00.
+Persistent=true
+RandomizedDelaySec=10min
+
+[Install]
+WantedBy=timers.target
