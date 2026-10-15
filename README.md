@@ -1,6 +1,6 @@
 # RestoSuite Report
 
-สคริปต์ Python สำหรับดาวน์โหลดรายงาน **Orders** (`/report/report-sales-orders`) จาก [RestoSuite back office](https://bo.sea.restosuite.ai) เป็นไฟล์ CSV หรือ Excel
+สคริปต์ Python สำหรับดึงข้อมูลจาก [RestoSuite back office](https://bo.sea.restosuite.ai): ดึงทั้ง 7 รายงานลงฐานข้อมูล SQLite (`export_all.py`) หรือดาวน์โหลดรายงาน **Orders** (`/report/report-sales-orders`) เป็นไฟล์ CSV หรือ Excel
 
 - ดึง**ครบทุกออเดอร์**ในช่วงวันที่ โดยเรียก JSON API ตัวเดียวกับที่หน้าเว็บใช้ ครั้งละ 500 ออเดอร์จนครบ
 - column เหมือนที่หน้า Orders แสดงเป็นค่าเริ่มต้น และหัวตารางใช้ชื่อเดียวกับหน้าเว็บ
@@ -41,6 +41,35 @@ python restosuite_orders.py --from 2026-10-01 --to 2026-10-31 --out october.xlsx
 | `--out` | `restosuite-orders-<from>_<to>.<format>` | ชื่อไฟล์ผลลัพธ์ |
 | `--status` | `20` | รหัสสถานะออเดอร์ (ค่าเดียวกับที่หน้า report ใช้เป็นค่าเริ่มต้น) |
 | `--currency` | `THB` | สกุลเงิน |
+
+## ดึงข้อมูลทั้งหมดลงฐานข้อมูล (SQLite)
+
+`export_all.py` ดึงทั้ง 7 รายงานใน **Common Reports** ลงฐานข้อมูล SQLite รายงานละ 1 ตาราง และดึงที่ระดับละเอียดที่สุดที่แต่ละรายงานให้ได้ ถ้าไม่ใส่วันที่ จะดึงตั้งแต่วันแรกที่ร้านมีข้อมูลจนถึงวันนี้
+
+```bash
+python export_all.py                                   # ทั้งหมด ลง restosuite.db
+python export_all.py --csv-dir export                  # และเขียน CSV ทุกตารางลง export/
+python export_all.py --from 2026-10-01 --to 2026-10-14 --db october.db
+python export_all.py --only orders --only order_items  # เฉพาะบางตาราง
+```
+
+| ตาราง | รายงาน | 1 แถว = |
+|---|---|---|
+| `orders` | Orders | 1 ออเดอร์ |
+| `order_items` | Items Breakdown | 1 รายการสินค้าในออเดอร์ |
+| `payments` | Payments Detail | 1 การชำระเงินของออเดอร์ |
+| `payments_daily` | Payments Breakdown | วัน × ช่องทางชำระเงิน |
+| `discounts` | Discount Detail List | 1 ส่วนลดในออเดอร์ |
+| `discounts_daily` | Discount & Prom | วัน × ส่วนลด/โปรโมชั่น |
+| `sales_daily` | Sales Summary Report | 1 วัน |
+
+- ตารางที่เป็นระดับออเดอร์เชื่อมกันด้วย `pos_order_id` (และ `order_id`)
+- วันที่เก็บแบบ ISO (`2026-10-14`, `2026-10-14 10:15:58`) จำนวนเงินเก็บเป็นตัวเลข ช่องที่ RestoSuite มีทั้งรหัสและชื่อ เช่น `dining_option` จะเก็บชื่อไว้ และเก็บรหัสในคอลัมน์ `*_code`
+- `_columns` บอกว่าแต่ละคอลัมน์มาจาก field ไหน และชื่อบนหน้าเว็บคืออะไร
+- `_exports` บันทึกช่วงวันที่ จำนวนแถว และผลเทียบยอดรวม
+- หลังดึงแต่ละตาราง สคริปต์จะเทียบยอดรวม เช่น Net Sales กับยอดที่ RestoSuite คำนวณเอง ถ้าไม่ตรงจะแจ้งและจบด้วย exit code 1
+- ทุกครั้งที่รัน ตารางจะถูกสร้างใหม่ทั้งหมด รันซ้ำได้โดยไม่เกิดข้อมูลซ้ำ
+- ดึงเฉพาะออเดอร์ที่สถานะ "เสร็จสิ้น" (status 20) เหมือนค่าเริ่มต้นของหน้า report
 
 ## ข้อควรรู้
 

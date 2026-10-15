@@ -4,3 +4,6 @@ __pycache__/
 .venv/
 restosuite-orders-*.csv
 restosuite-orders-*.xlsx
+restosuite.db
+*.db
+export/

@@ -95,7 +95,22 @@ class RestoSuite:
             "Shop-Id": shop_ids[0],
         }
 
-    def post(self, path, payload, retries=3):
+    def post(self, path, payload):
+        for wait in (5, 15, 30, 60, 120):
+            data = self._post(path, payload)
+            # "please try again later": the report engine is busy, so back off and retry.
+            if data.get("code") != "metric-01002":
+                break
+            click.echo(f"  RestoSuite ไม่ว่าง รอ {wait} วินาทีแล้วลองใหม่", err=True)
+            time.sleep(wait)
+        else:
+            data = self._post(path, payload)
+        if data.get("code") != "000":
+            # Expired sessions come back as HTTP 200 with an error code.
+            raise click.ClickException(f"{path}: {data.get('code')} {data.get('msg')}")
+        return data["data"]
+
+    def _post(self, path, payload, retries=3):
         body = json.dumps(payload).encode()
         for attempt in range(1, retries + 1):
             req = urllib.request.Request(BASE_URL + path, data=body, headers=self.headers, method="POST")
@@ -112,41 +127,57 @@ class RestoSuite:
                 if attempt == retries:
                     raise click.ClickException(f"{path}: {e.reason}")
             time.sleep(2 * attempt)
-        if data.get("code") != "000":
-            # Expired sessions come back as HTTP 200 with an error code.
-            raise click.ClickException(f"{path}: {data.get('code')} {data.get('msg')}")
-        return data["data"]
+        return data
 
-    def field_labels(self):
-        meta = self.post("/api/report/metadata/get", {"reportId": REPORT_ID})
+    def field_labels(self, report_id=REPORT_ID):
+        meta = self.post("/api/report/metadata/get", {"reportId": report_id})
         return {f["reportFieldName"]: f["displayText"] for f in meta["dimList"] + meta["metricsList"]}
 
-    def iter_orders(self, start, end, shop_ids, fields, statuses, currency):
+    def query_rows(self, report_id, fields, filters, order_by, unit="แถว"):
+        """Yield every row of a report query, one page at a time."""
         payload = {
             "metricsByDimQryV2": [],
-            "reportId": REPORT_ID,
+            "reportId": report_id,
             "selectFields": fields,
             "aggFilters": [],
             "proportionProperty": {"enable": False},
             "dimAdditionalStrategy": [],
-            "filters": [
-                {"fieldName": "D_businessDate", "filterType": "RANGE", "filterValue": [start, end]},
-                {"fieldName": "D_orderStatus", "filterType": "IN", "filterValue": statuses},
-                {"fieldName": "D_currency", "filterType": "EQ", "filterValue": [currency]},
-                {"fieldName": "D_shopId", "filterType": "IN", "filterValue": shop_ids},
-            ],
-            "orderBy": [{"D_businessDate": "ASC"}, {"D_shopName": "ASC"}, {"D_posOrderId": "ASC"}],
+            "filters": filters,
+            "orderBy": order_by,
         }
         page_no = 1
         while True:
             payload["page"] = {"pageNo": page_no, "pageSize": PAGE_SIZE}
             data = self.post("/api/report/data/queryData", payload)
             page = data["page"]
-            click.echo(f"  หน้า {page_no}/{max(page['pageCount'], 1)} ({page['total']} ออเดอร์)", err=True)
+            click.echo(f"  หน้า {page_no}/{max(page['pageCount'], 1)} ({page['total']} {unit})", err=True)
             yield from data["rows"]
             if page_no >= page["pageCount"]:
                 break
             page_no += 1
+
+    def query_totals(self, report_id, metrics, filters):
+        """Grand totals for the given metrics, as the report page shows in its footer."""
+        payload = {
+            "metricsByDimQryV2": [],
+            "reportId": report_id,
+            "selectFields": metrics,
+            "aggFilters": [],
+            "proportionProperty": {"enable": False},
+            "filters": filters,
+        }
+        rows = self.post("/api/report/data/queryData", payload)["rows"]
+        return {m: (rows[0].get(m) or {}).get("value") for m in metrics} if rows else {}
+
+    def iter_orders(self, start, end, shop_ids, fields, statuses, currency):
+        filters = [
+            {"fieldName": "D_businessDate", "filterType": "RANGE", "filterValue": [start, end]},
+            {"fieldName": "D_orderStatus", "filterType": "IN", "filterValue": statuses},
+            {"fieldName": "D_currency", "filterType": "EQ", "filterValue": [currency]},
+            {"fieldName": "D_shopId", "filterType": "IN", "filterValue": shop_ids},
+        ]
+        order_by = [{"D_businessDate": "ASC"}, {"D_shopName": "ASC"}, {"D_posOrderId": "ASC"}]
+        return self.query_rows(REPORT_ID, fields, filters, order_by, unit="ออเดอร์")
 
 
 def cell(row, field):
