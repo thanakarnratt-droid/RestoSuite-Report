@@ -126,7 +126,7 @@ python dashboard/app.py set-password   # ตั้งรหัสผ่าน (�
 python dashboard/app.py                # http://127.0.0.1:5021
 ```
 
-บน VPS ให้รันด้วย Docker (user ที่อยู่ในกลุ่ม docker ไม่ต้องใช้ sudo) container จะ mount โฟลเดอร์ repo เข้าไปเลย เว็บจึงเห็นข้อมูลใหม่ทุกวันโดยไม่ต้อง restart:
+บน VPS ให้รันด้วย Docker (user ที่อยู่ในกลุ่ม docker ไม่ต้องใช้ sudo) container จะ mount โฟลเดอร์ repo เข้าไปเลย เว็บจึงเห็นข้อมูลใหม่ทุกวันโดยไม่ต้อง restart และอ่านค่าตั้งค่าจาก `.env` ในโฟลเดอร์นั้น:
 
 ```bash
 cd ~/RestoSuite-Report
@@ -134,7 +134,7 @@ cd ~/RestoSuite-Report
 .venv/bin/python dashboard/app.py set-password
 docker build -t restosuite-dashboard -f dashboard/Dockerfile .
 docker run -d --name restosuite-dashboard --restart unless-stopped \
-  -p 127.0.0.1:5021:5021 -v "$PWD":/app --env-file .env restosuite-dashboard
+  -p 127.0.0.1:5021:5021 -v "$PWD":/app restosuite-dashboard
 ```
 
 เปิดให้เข้าจากภายนอกด้วย nginx + HTTPS ตามคำสั่งใน `deploy/nginx-dashboard.conf` (ต้องใช้ sudo และต้องตั้ง DNS ของโดเมนให้ชี้มาที่ VPS ก่อน) ถ้าอัปเดตโค้ดหรือเปลี่ยนรหัสผ่าน ให้รัน `git pull && docker restart restosuite-dashboard`
