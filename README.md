@@ -1,6 +1,6 @@
 # RestoSuite Report
 
-ดึงข้อมูลยอดขายจาก [RestoSuite back office](https://bo.sea.restosuite.ai) ทั้ง 7 รายงานใน **Common Reports** ลงฐานข้อมูล SQLite ให้อัปเดตเองทุกวันบน VPS และแสดงผลเป็น dashboard บนเว็บที่ต้องล็อกอินก่อนเข้า
+ดึงข้อมูลยอดขาย**ทุกสาขา**จาก [RestoSuite back office](https://bo.sea.restosuite.ai) ทั้ง 7 รายงานใน **Common Reports** ลงฐานข้อมูล SQLite ให้อัปเดตเองทุกวันบน VPS และแสดงผลเป็น dashboard บนเว็บที่ต้องล็อกอินก่อนเข้า
 
 ```
 RestoSuite back office ──(JSON API, ทุกวัน 04:00)──> export_all.py ──> restosuite.db + export/*.csv
@@ -46,7 +46,7 @@ RestoSuite back office ──(JSON API, ทุกวัน 04:00)──> export_
 
 ## 3. หา token และ ID จาก RestoSuite
 
-ต้องใช้ทั้งหมด 5 ค่า ใส่ไว้ในไฟล์ `.env` (ดูตัวอย่างใน `.env.example`)
+ต้องใช้ token 1 ค่าและ ID ของบัญชี 3 ค่า ใส่ไว้ในไฟล์ `.env` (ดูตัวอย่างใน `.env.example`)
 
 **token (`RESTOSUITE_TOKEN`)**
 1. ล็อกอิน https://bo.sea.restosuite.ai ใน Chrome
@@ -60,7 +60,7 @@ RestoSuite back office ──(JSON API, ทุกวัน 04:00)──> export_
 
 | ตัวแปรใน `.env` | ค่าจาก header |
 |---|---|
-| `RESTOSUITE_SHOP_IDS` | `Shop-Id` (หลายร้านให้คั่นด้วยจุลภาค) |
+| `RESTOSUITE_SHOP_IDS` | ใส่ `all` (แนะนำ) เพื่อดึงทุกสาขาที่บัญชีเห็น หรือใส่ `Shop-Id` คั่นด้วยจุลภาคถ้าต้องการเฉพาะบางสาขา |
 | `RESTOSUITE_BRAND_ID` | `Brand-Id` |
 | `RESTOSUITE_CORPORATION_ID` | `Corporation-Id` |
 | `RESTOSUITE_ORGANIZATION_ID` | `Organization-Id` |
@@ -73,7 +73,7 @@ RestoSuite back office ──(JSON API, ทุกวัน 04:00)──> export_
 git clone https://github.com/thanakarnratt-droid/RestoSuite-Report.git
 cd RestoSuite-Report
 pip install -r requirements.txt
-cp .env.example .env        # แล้วกรอก 5 ค่าจากขั้นที่ 3
+cp .env.example .env        # แล้วกรอกค่าจากขั้นที่ 3
 ```
 
 ลองดึงข้อมูล:
@@ -117,7 +117,7 @@ python3 -m venv .venv
 
 ### 5.3 ใส่ `.env`
 
-สร้าง `.env` บน VPS แล้วกรอก 5 ค่าจากขั้นที่ 3:
+สร้าง `.env` บน VPS แล้วกรอกค่าจากขั้นที่ 3:
 
 ```bash
 cp .env.example .env
@@ -190,7 +190,7 @@ tail -30 ~/RestoSuite-Report/logs/export.log         # ดูผลรอบล�
 
 ## 7. ติดตั้ง Dashboard
 
-Dashboard มี 8 หน้า: **ภาพรวม** (ยอดขายสุทธิ, ออเดอร์, ยอดเฉลี่ย, ลูกค้า, ส่วนลด พร้อมเทียบกับช่วงก่อนหน้า, กราฟยอดรายวัน/รายชั่วโมง, ช่องทางชำระเงิน, สินค้าขายดี) และหน้าของรายงานแต่ละตัว ทุกหน้ากรองช่วงวันที่ได้ (ปุ่มลัด 7 วัน / 30 วัน / เดือนนี้ / เดือนก่อน / ทั้งหมด) และดาวน์โหลด CSV ของช่วงที่เลือกได้ เว็บอ่านฐานข้อมูลอย่างเดียว ไม่เคยเขียน
+Dashboard มี 8 หน้า: **ภาพรวม** (ยอดขายสุทธิ, ออเดอร์, ยอดเฉลี่ย, ลูกค้า, ส่วนลด พร้อมเทียบกับช่วงก่อนหน้า, กราฟยอดรายวัน/รายชั่วโมง, ช่องทางชำระเงิน, สินค้าขายดี) และหน้าของรายงานแต่ละตัว ทุกหน้ากรองช่วงวันที่ได้ (ปุ่มลัด 7 วัน / 30 วัน / เดือนนี้ / เดือนก่อน / ทั้งหมด) และดาวน์โหลด CSV ของช่วงที่เลือกได้ เมื่อมีมากกว่า 1 สาขา จะมีตัวเลือก **สาขา** (ทุกสาขา หรือเลือกทีละสาขา) และหน้าภาพรวมจะมีกราฟยอดขายตามสาขาเพิ่มขึ้นมา เว็บอ่านฐานข้อมูลอย่างเดียว ไม่เคยเขียน
 
 ### 7.1 ตั้งรหัสผ่าน
 
@@ -272,13 +272,24 @@ sudo sh deploy/setup-nginx.sh
 | ดูผลงานรายวันล่าสุด | `tail -30 logs/export.log` |
 | สั่งอัปเดตข้อมูลทันที | `deploy/run-daily.sh` |
 | ดึงย้อนหลังมากกว่า 7 วัน | `deploy/run-daily.sh --days 30` |
-| สร้างฐานข้อมูลใหม่ทั้งหมด | `.venv/bin/python export_all.py --csv-dir export` |
+| ดึงประวัติทั้งหมดใหม่ (ทุกสาขา) | `.venv/bin/python export_all.py --csv-dir export` |
+| ลบตารางแล้วสร้างใหม่ทั้งหมด | `.venv/bin/python export_all.py --rebuild --csv-dir export` |
+| ดึงเฉพาะบางสาขา | `.venv/bin/python export_all.py --shop 406937599 --days 30` |
 | อัปเดต token | แก้ `RESTOSUITE_TOKEN` ใน `.env` แล้วรัน `deploy/run-daily.sh` เพื่อทดสอบ |
 | เปลี่ยนรหัสผ่าน dashboard | `.venv/bin/python dashboard/app.py set-password && docker restart restosuite-dashboard` |
 | อัปเดตโค้ด | `git pull && docker restart restosuite-dashboard` |
 | แก้ `requirements.txt` หรือ `dashboard/Dockerfile` | `docker build -t restosuite-dashboard -f dashboard/Dockerfile .` แล้ว `docker rm -f restosuite-dashboard` และรัน `docker run` ในขั้นที่ 7.2 ใหม่ |
 | ดู log ของ dashboard | `docker logs --tail 50 restosuite-dashboard` |
 | สำรองฐานข้อมูล | `.venv/bin/python -c "import sqlite3; sqlite3.connect('restosuite.db').backup(sqlite3.connect('restosuite-backup.db'))"` (สำรองได้แม้งานรายวันกำลังรัน) |
+
+### เพิ่มสาขาใหม่
+
+1. ให้บัญชี RestoSuite ที่ใช้ดึงข้อมูลมีสิทธิ์ดูรายงานของสาขาใหม่
+2. ถ้า `RESTOSUITE_SHOP_IDS=all` **ไม่ต้องทำอะไรเพิ่ม** งานรายวันรอบถัดไปจะเจอสาขาใหม่เอง และดึงประวัติทั้งหมดของสาขานั้นมาให้ ไม่ใช่แค่ 7 วัน ถ้าใส่ Store ID ไว้ ให้เพิ่ม ID ของสาขาใหม่ต่อท้าย
+3. อยากให้ข้อมูลมาทันที ให้สั่ง `deploy/run-daily.sh` เอง
+4. dashboard จะมีตัวเลือก **สาขา** ขึ้นมาเองเมื่อมีข้อมูลมากกว่า 1 สาขา
+
+สาขาที่ยังไม่มียอดขายเลยจะถูกข้ามไป และจะถูกดึงเมื่อเริ่มมียอดขาย
 
 **ควรเช็กเป็นระยะ:** ระบบไม่มีการแจ้งเตือนเมื่องานรายวันพัง ถ้าตัวเลขบน dashboard ไม่ขยับ ("ข้อมูลถึง" ใต้หัวข้อหน้าเป็นวันเก่า) ให้ดู `logs/export.log`
 
@@ -306,6 +317,8 @@ python export_all.py --csv-dir export                  # และเขีย�
 python export_all.py --days 7 --csv-dir export         # อัปเดตเฉพาะ 7 วันล่าสุด (งานรายวัน)
 python export_all.py --from 2026-10-01 --to 2026-10-14 --db october.db
 python export_all.py --only orders --only order_items  # เฉพาะบางตาราง
+python export_all.py --shop 406937599                  # เฉพาะบางสาขา (ใส่ซ้ำได้)
+python export_all.py --rebuild                         # ลบตารางแล้วสร้างใหม่ทั้งหมด
 ```
 
 | ตาราง | รายงานใน RestoSuite | 1 แถว = |
@@ -318,12 +331,22 @@ python export_all.py --only orders --only order_items  # เฉพาะบา�
 | `discounts_daily` | Discount & Prom | วัน × ส่วนลด/โปรโมชั่น |
 | `sales_daily` | Sales Summary Report | 1 วัน |
 
+**รองรับหลายสาขา**
+
+- ทุกแถวในทุกตารางมี `shop_id` และตาราง `shops` เก็บรายชื่อสาขา (`shop_id`, `shop_name`, `currency`, วันแรกและวันล่าสุดที่มีข้อมูล) ใช้ join เพื่อเอาชื่อสาขาได้
+- สคริปต์ดึงทีละสาขา และแต่ละรอบจะลบแล้วใส่ใหม่เฉพาะแถวของสาขานั้นในช่วงวันที่ที่ดึง ข้อมูลของสาขาอื่นจึงไม่ถูกแตะ
+- เทียบยอดรวมกับ RestoSuite แยกทีละสาขา และ `_exports` เก็บผลแยกตาม (ตาราง, สาขา)
+- มี index (`shop_id`, `business_date`) ในทุกตาราง เพราะทุก query กรองด้วยสาขาและวันที่
+- ฐานข้อมูลที่สร้างจากเวอร์ชันก่อนหน้าจะถูกปรับโครงสร้างเองตอนรันครั้งแรก (สร้างตาราง `shops`, สร้าง `_exports` ใหม่, เพิ่ม index) โดยไม่ต้องดึงข้อมูลใหม่ทั้งหมด
+
+**ข้อมูลในตาราง**
+
 - ตารางที่เป็นระดับออเดอร์เชื่อมกันด้วย `pos_order_id` (และ `order_id`)
 - วันที่เก็บแบบ ISO (`2026-10-14`, `2026-10-14 10:15:58`) จำนวนเงินเก็บเป็นตัวเลข ช่องที่ RestoSuite มีทั้งรหัสและชื่อ เช่น `dining_option` จะเก็บชื่อไว้ และเก็บรหัสในคอลัมน์ `*_code`
 - `_columns` บอกว่าแต่ละคอลัมน์มาจาก field ไหนของ RestoSuite และชื่อบนหน้าเว็บคืออะไร
-- `_exports` บันทึกช่วงวันที่ จำนวนแถว เวลาที่ดึง และผลเทียบยอดรวมของแต่ละตาราง
+- `_exports` บันทึกช่วงวันที่ จำนวนแถว เวลาที่ดึง และผลเทียบยอดรวม แยกตามตารางและสาขา
 - หลังดึงแต่ละตาราง สคริปต์จะเทียบยอดรวม (เช่น Net Sales, จำนวนรายการ) กับยอดที่ RestoSuite คำนวณเอง ถ้าไม่ตรงจะแจ้งและจบด้วย exit code 1
-- ถ้าไม่ใส่ `--days` ตารางจะถูกสร้างใหม่ทั้งหมด ถ้าใส่ `--days N` จะลบแล้วดึงใหม่เฉพาะ N วันล่าสุด ทั้งสองแบบรันซ้ำได้โดยไม่เกิดข้อมูลซ้ำ
+- ถ้าไม่ใส่ `--days` จะดึงประวัติทั้งหมดของแต่ละสาขามาแทนของเดิม ถ้าใส่ `--days N` จะดึงใหม่เฉพาะ N วันล่าสุด ยกเว้นสาขาที่ยังไม่มีในฐานข้อมูล ซึ่งจะได้ประวัติทั้งหมด ทั้งสองแบบรันซ้ำได้โดยไม่เกิดข้อมูลซ้ำ
 - CSV ใน `--csv-dir` เป็นข้อมูลทั้งตารางเสมอ บันทึกเป็น UTF-8 BOM จึงเปิดภาษาไทยใน Excel ได้ถูกต้อง
 - ดึงเฉพาะออเดอร์ที่สถานะ "เสร็จสิ้น" (status 20) เหมือนค่าเริ่มต้นของหน้า report ออเดอร์ที่ void หรือยกเลิกจะไม่อยู่ในฐานข้อมูล
 - "วันนี้" นับตามเวลาไทย (`RESTOSUITE_TIMEZONE`, ค่าเริ่มต้น `Asia/Bangkok`) แม้ server จะตั้งเวลาเป็น UTC
@@ -340,7 +363,7 @@ python restosuite_orders.py --from 2026-10-01 --to 2026-10-31 --out october.xlsx
 |---|---|---|
 | `--from` | เมื่อวาน | วันเริ่ม (YYYY-MM-DD) |
 | `--to` | เท่ากับ `--from` | วันสิ้นสุด |
-| `--shop` | `RESTOSUITE_SHOP_IDS` | Store ID ใส่ซ้ำได้หลายร้าน |
+| `--shop` | `RESTOSUITE_SHOP_IDS` (ค่าเริ่มต้น: ทุกสาขา) | Store ID ใส่ซ้ำได้หลายร้าน |
 | `--format` | `csv` | `csv` หรือ `xlsx` |
 | `--out` | `restosuite-orders-<from>_<to>.<format>` | ชื่อไฟล์ผลลัพธ์ |
 | `--status` | `20` | รหัสสถานะออเดอร์ |
@@ -351,7 +374,7 @@ python restosuite_orders.py --from 2026-10-01 --to 2026-10-31 --out october.xlsx
 | ตัวแปร | ต้องมี | ใช้กับ |
 |---|---|---|
 | `RESTOSUITE_TOKEN` | ✓ | สคริปต์ดึงข้อมูล |
-| `RESTOSUITE_SHOP_IDS` | ✓ | สคริปต์ดึงข้อมูล |
+| `RESTOSUITE_SHOP_IDS` | | สาขาที่จะดึง: `all` (ค่าเริ่มต้น) หรือ Store ID คั่นด้วยจุลภาค |
 | `RESTOSUITE_BRAND_ID`, `RESTOSUITE_CORPORATION_ID`, `RESTOSUITE_ORGANIZATION_ID` | ✓ | สคริปต์ดึงข้อมูล |
 | `RESTOSUITE_TIMEZONE` | | เขตเวลาที่ใช้นับ "วันนี้" (ค่าเริ่มต้น `Asia/Bangkok`) |
 | `DASHBOARD_PASSWORD_HASH` | ✓ (dashboard) | สร้างด้วย `dashboard/app.py set-password` |

@@ -37,6 +37,7 @@
     {% if tbl.search_col %}
       <form method="get" class="search">
         <input type="hidden" name="from" value="{{ start }}"><input type="hidden" name="to" value="{{ end }}">
+        {% if shop %}<input type="hidden" name="shop" value="{{ shop }}">{% endif %}
         <input type="search" name="q" value="{{ tbl.search }}" placeholder="ค้นหาเลขออเดอร์" aria-label="ค้นหาเลขออเดอร์">
       </form>
     {% endif %}

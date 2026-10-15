@@ -12,18 +12,23 @@
 <body>
 {% set downloads = {"orders": "orders", "sales": "sales_daily", "items": "order_items", "payments": "payments",
                     "payment-mix": "payments_daily", "discounts": "discounts", "promotions": "discounts_daily"} %}
+{# Links keep the chosen dates and store. #}
+{% set scope_args = {'from': start, 'to': end} %}
+{% if shop %}{% set _ = scope_args.update({'shop': shop}) %}{% endif %}
 <div class="shell">
   <aside class="nav">
     <div class="brand">
       <span class="brand-mark" aria-hidden="true"></span>
       <div>
-        <div class="brand-name">More yogurt Paragon</div>
+        <div class="brand-name">
+          {%- if shops|length == 1 %}{{ shops[0][1] }}{% elif shop_name %}{{ shop_name }}{% else %}ทุกสาขา ({{ shops|length }}){% endif -%}
+        </div>
         <div class="brand-sub">RestoSuite Dashboard</div>
       </div>
     </div>
     <nav>
       {% for key, label, report_name in pages %}
-        <a href="{{ url_for(key.replace('-', '_'), **{'from': start, 'to': end}) }}"
+        <a href="{{ url_for(key.replace('-', '_'), **scope_args) }}"
            class="{{ 'active' if key == active }}" {% if key == active %}aria-current="page"{% endif %}>
           <span>{{ label }}</span>
           {% if report_name != "Overview" %}<small>{{ report_name }}</small>{% endif %}
@@ -44,6 +49,14 @@
         </p>
       </div>
       <form class="filters" method="get">
+        {% if shops|length > 1 %}
+          <label>สาขา
+            <select name="shop">
+              <option value="">ทุกสาขา</option>
+              {% for sid, sname in shops %}<option value="{{ sid }}" {{ 'selected' if sid == shop }}>{{ sname }}</option>{% endfor %}
+            </select>
+          </label>
+        {% endif %}
         <label>ตั้งแต่ <input type="date" name="from" value="{{ start }}" min="{{ first }}" max="{{ last }}"></label>
         <label>ถึง <input type="date" name="to" value="{{ end }}" min="{{ first }}" max="{{ last }}"></label>
         <button type="submit" class="primary">แสดง</button>
@@ -55,7 +68,7 @@
           <button type="button" data-all>ทั้งหมด</button>
         </div>
         {% if active in downloads %}
-          <a class="download" href="{{ url_for('download', table=downloads[active], **{'from': start, 'to': end}) }}">ดาวน์โหลด CSV</a>
+          <a class="download" href="{{ url_for('download', table=downloads[active], **scope_args) }}">ดาวน์โหลด CSV</a>
         {% endif %}
       </form>
     </header>

@@ -84,6 +84,10 @@
   // Redraw with the other palette when the OS switches light/dark.
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", drawAll);
 
+  // Picking a store applies it straight away.
+  const shopSelect = document.querySelector("select[name=shop]");
+  if (shopSelect) shopSelect.addEventListener("change", () => shopSelect.form.submit());
+
   // Date presets: fill the range relative to the last day that has data, then submit.
   const presets = document.querySelector(".presets");
   if (presets) {

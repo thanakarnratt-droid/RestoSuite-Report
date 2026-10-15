@@ -88,7 +88,7 @@ main { padding: 24px 28px 48px; min-width: 0; }
 .page-head p { margin: 4px 0 0; font-size: 13px; }
 .filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .filters label { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-2); }
-input[type=date], input[type=search], input[type=password] {
+input[type=date], input[type=search], input[type=password], select {
   background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; min-height: 36px;
 }
 button.primary, .download {

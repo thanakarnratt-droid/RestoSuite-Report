@@ -90,7 +90,8 @@ def require_env(name):
 
 
 class RestoSuite:
-    def __init__(self, token, shop_ids):
+    def __init__(self, token, shop_ids=()):
+        self.token = token
         self.headers = {
             "Accept": "application/json, text/plain, */*",
             "Content-Type": "application/json",
@@ -101,8 +102,35 @@ class RestoSuite:
             "Corporation-Id": require_env("RESTOSUITE_CORPORATION_ID"),
             "Organization-Id": require_env("RESTOSUITE_ORGANIZATION_ID"),
             "Organization-Type": os.environ.get("RESTOSUITE_ORGANIZATION_TYPE", "7"),
-            "Shop-Id": shop_ids[0],
         }
+        if shop_ids:
+            self.use_shop(shop_ids[0])
+
+    def use_shop(self, shop_id):
+        """The report pages send the store being viewed as a header; match it per store."""
+        self.headers["Shop-Id"] = shop_id
+
+    def login_id(self):
+        """The account name inside the token (a JWT), which the shop list endpoint asks for."""
+        import base64
+        try:
+            payload = self.token.split(".")[1]
+            payload += "=" * (-len(payload) % 4)
+            return json.loads(base64.urlsafe_b64decode(payload)).get("loginId", "")
+        except (IndexError, ValueError):
+            return ""
+
+    def list_shops(self):
+        """Every store this account can report on: [{"shop_id", "shop_name", "currency"}]."""
+        data = self.post("/api/report/merchant/getReportShopFilters", {
+            "corporationId": self.headers["Corporation-Id"],
+            "employeeCode": self.login_id(),
+            "organizationId": self.headers["Organization-Id"],
+            "orgTypeList": [int(self.headers["Organization-Type"])],
+            "reportId": int(REPORT_ID),
+        })
+        return [{"shop_id": s["shopId"], "shop_name": s["shopName"], "currency": group["currency"]["value"]}
+                for group in data.get("currencyShops") or [] for s in group.get("shops") or []]
 
     def post(self, path, payload):
         for wait in (5, 15, 30, 60, 120):
@@ -249,13 +277,18 @@ def main(start, end, shops, fmt, out, statuses, currency):
             date.fromisoformat(d)
         except ValueError:
             raise click.BadParameter(f"วันที่ไม่ถูกต้อง: {d} (ใช้ YYYY-MM-DD)")
-    shop_ids = list(shops) or [s.strip() for s in require_env("RESTOSUITE_SHOP_IDS").split(",") if s.strip()]
-
-    api = RestoSuite(require_env("RESTOSUITE_TOKEN"), shop_ids)
+    api = RestoSuite(require_env("RESTOSUITE_TOKEN"))
+    shop_ids = list(shops) or [s.strip() for s in os.environ.get("RESTOSUITE_SHOP_IDS", "all").split(",")
+                               if s.strip()]
+    if shop_ids == ["all"]:
+        shop_ids = [s["shop_id"] for s in api.list_shops() if s["currency"] == currency]
     labels = api.field_labels()
     click.echo(f"ดึงออเดอร์ {start} ถึง {end} ร้าน {', '.join(shop_ids)}", err=True)
-    rows = [[cell(r, f) for f in DEFAULT_FIELDS]
-            for r in api.iter_orders(start, end, shop_ids, DEFAULT_FIELDS, list(statuses), currency)]
+    rows = []
+    for shop_id in shop_ids:  # one store per request, matching the Shop-Id header the pages send
+        api.use_shop(shop_id)
+        rows += [[cell(r, f) for f in DEFAULT_FIELDS]
+                 for r in api.iter_orders(start, end, [shop_id], DEFAULT_FIELDS, list(statuses), currency)]
     headers = [labels.get(f, f) for f in DEFAULT_FIELDS]
 
     out = out or Path(f"restosuite-orders-{start}_{end}.{fmt}")
